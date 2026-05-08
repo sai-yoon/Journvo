@@ -1,10 +1,10 @@
 {{-- resources/views/settings/index.blade.php --}}
 @extends('layouts.app')
 @section('title', 'Account Settings')
- 
+
 @section('content')
 <div class="settings-page">
- 
+
     {{-- ─── Page Header ──────────────────────────────────────────────── --}}
     <header class="settings-header">
         <div class="settings-header-left">
@@ -15,9 +15,9 @@
             {{ strtoupper(substr($user->name, 0, 1)) }}
         </div>
     </header>
- 
+
     <div class="settings-grid">
- 
+
         {{-- ─── Profile Card ─────────────────────────────────────────── --}}
         <section class="settings-card" id="profile">
             <div class="settings-card-header">
@@ -27,23 +27,23 @@
                     <p class="settings-card-desc">Update your name and email address</p>
                 </div>
             </div>
- 
+
             @if(session('profile_success'))
                 <div class="settings-alert settings-alert--success">
                     ✓ {{ session('profile_success') }}
                 </div>
             @endif
- 
+
             @if($errors->hasBag('default') && !$errors->hasBag('password'))
                 <div class="settings-alert settings-alert--error">
                     {{ $errors->first() }}
                 </div>
             @endif
- 
+
             <form method="POST" action="{{ route('settings.profile') }}" class="settings-form">
                 @csrf
                 @method('PATCH')
- 
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="name">Full name</label>
@@ -68,7 +68,7 @@
                         >
                     </div>
                 </div>
- 
+
                 <div class="settings-form-footer">
                     <div class="settings-member-since">
                         Member since {{ $user->created_at->format('F Y') }}
@@ -79,7 +79,7 @@
                 </div>
             </form>
         </section>
- 
+
         {{-- ─── Password Card ─────────────────────────────────────────── --}}
         <section class="settings-card" id="password">
             <div class="settings-card-header">
@@ -89,23 +89,23 @@
                     <p class="settings-card-desc">Choose a strong password to keep your journal secure</p>
                 </div>
             </div>
- 
+
             @if(session('password_success'))
                 <div class="settings-alert settings-alert--success">
                     ✓ {{ session('password_success') }}
                 </div>
             @endif
- 
+
             @if($errors->hasBag('updatePassword'))
                 <div class="settings-alert settings-alert--error">
                     {{ $errors->getBag('updatePassword')->first() }}
                 </div>
             @endif
- 
+
             <form method="POST" action="{{ route('settings.password') }}" class="settings-form">
                 @csrf
                 @method('PATCH')
- 
+
                 <div class="form-group">
                     <label for="current_password">Current password</label>
                     <div class="input-password-wrap">
@@ -121,7 +121,7 @@
                         </button>
                     </div>
                 </div>
- 
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="password">New password</label>
@@ -154,7 +154,7 @@
                         </div>
                     </div>
                 </div>
- 
+
                 {{-- Password strength indicator --}}
                 <div class="password-strength" id="passwordStrength" style="display:none">
                     <div class="strength-bars">
@@ -165,7 +165,7 @@
                     </div>
                     <span class="strength-label" id="strengthLabel">Weak</span>
                 </div>
- 
+
                 <div class="settings-form-footer">
                     <p class="settings-hint">Minimum 8 characters</p>
                     <button type="submit" class="btn-settings-save">
@@ -174,50 +174,21 @@
                 </div>
             </form>
         </section>
- 
-        {{-- ─── Journal Stats Card ────────────────────────────────────── --}}
-        <section class="settings-card settings-card--stats">
+
+        {{-- ─── Stats link card ───────────────────────────────────────── --}}
+        <section class="settings-card settings-card--stats-link">
             <div class="settings-card-header">
                 <div class="settings-card-icon">◈</div>
                 <div>
-                    <h2 class="settings-card-title">Your Journal Stats</h2>
-                    <p class="settings-card-desc">A snapshot of your journaling journey</p>
+                    <h2 class="settings-card-title">Journal Stats</h2>
+                    <p class="settings-card-desc">View your streaks, mood charts, heatmap and more</p>
                 </div>
-            </div>
-            <div class="stats-grid">
-                <div class="stat-block">
-                    <span class="stat-block-number">
-                        {{ $user->journalEntries()->count() }}
-                    </span>
-                    <span class="stat-block-label">Total entries</span>
-                </div>
-                <div class="stat-block">
-                    <span class="stat-block-number">
-                        {{ $user->conversations()->count() }}
-                    </span>
-                    <span class="stat-block-label">Conversations</span>
-                </div>
-                <div class="stat-block">
-                    <span class="stat-block-number">
-                        {{ $user->journalEntries()->where('mood', 'positive')->count() }}
-                    </span>
-                    <span class="stat-block-label">Positive days</span>
-                </div>
-                <div class="stat-block">
-                    @php
-                        $streak = 0;
-                        $date   = now()->toDateString();
-                        while ($user->journalEntries()->where('entry_date', $date)->exists()) {
-                            $streak++;
-                            $date = \Carbon\Carbon::parse($date)->subDay()->toDateString();
-                        }
-                    @endphp
-                    <span class="stat-block-number">{{ $streak }}</span>
-                    <span class="stat-block-label">Day streak</span>
-                </div>
+                <a href="{{ route('stats') }}" class="btn-settings-save" style="margin-left:auto">
+                    View Stats →
+                </a>
             </div>
         </section>
- 
+
         {{-- ─── Danger Zone Card ──────────────────────────────────────── --}}
         <section class="settings-card settings-card--danger" id="danger">
             <div class="settings-card-header">
@@ -227,17 +198,17 @@
                     <p class="settings-card-desc">Permanently delete your account and all journal data</p>
                 </div>
             </div>
- 
+
             @if($errors->hasBag('deleteAccount'))
                 <div class="settings-alert settings-alert--error">
                     {{ $errors->getBag('deleteAccount')->first() }}
                 </div>
             @endif
- 
+
             <div class="danger-warning">
                 <p>This action <strong>cannot be undone</strong>. All your conversations, journal entries, and account data will be permanently deleted.</p>
             </div>
- 
+
             {{-- Collapsed by default, revealed by button --}}
             <div id="deleteFormWrap" style="display:none">
                 <form method="POST" action="{{ route('settings.destroy') }}" class="settings-form">
@@ -266,22 +237,22 @@
                     </div>
                 </form>
             </div>
- 
+
             <div id="deleteToggleWrap">
                 <button class="btn-settings-danger-outline" id="showDeleteForm">
                     I want to delete my account
                 </button>
             </div>
         </section>
- 
+
     </div>{{-- /settings-grid --}}
 </div>{{-- /settings-page --}}
 @endsection
- 
+
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', () => {
- 
+
     // ── Toggle password visibility ─────────────────────────────────────────
     document.querySelectorAll('.toggle-password').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -291,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.querySelector('.eye-icon').textContent = isHidden ? '◉' : '◎';
         });
     });
- 
+
     // ── Password strength meter ────────────────────────────────────────────
     const passwordInput  = document.getElementById('password');
     const strengthWrap   = document.getElementById('passwordStrength');
@@ -302,14 +273,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('bar3'),
         document.getElementById('bar4'),
     ];
- 
+
     const levels = [
         { label: 'Weak',      color: 'var(--rose)',     fill: 1 },
         { label: 'Fair',      color: 'var(--amber)',    fill: 2 },
         { label: 'Good',      color: 'var(--amber-lt)', fill: 3 },
         { label: 'Strong',    color: 'var(--sage)',     fill: 4 },
     ];
- 
+
     function scorePassword(p) {
         let score = 0;
         if (p.length >= 8)  score++;
@@ -319,16 +290,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (/[^A-Za-z0-9]/.test(p)) score++;
         return Math.min(Math.floor(score / 1.25), 3);
     }
- 
+
     if (passwordInput) {
         passwordInput.addEventListener('input', () => {
             const val = passwordInput.value;
             if (!val) { strengthWrap.style.display = 'none'; return; }
- 
+
             strengthWrap.style.display = 'flex';
             const level = scorePassword(val);
             const { label, color, fill } = levels[level];
- 
+
             bars.forEach((bar, i) => {
                 bar.style.background = i < fill ? color : 'var(--blush)';
             });
@@ -336,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
             strengthLabel.style.color = color;
         });
     }
- 
+
     // ── Delete account form toggle ─────────────────────────────────────────
     const showBtn       = document.getElementById('showDeleteForm');
     const cancelBtn     = document.getElementById('cancelDelete');
@@ -344,13 +315,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleWrap    = document.getElementById('deleteToggleWrap');
     const confirmInput  = document.getElementById('confirm_delete');
     const confirmBtn    = document.getElementById('confirmDeleteBtn');
- 
+
     showBtn?.addEventListener('click', () => {
         deleteWrap.style.display  = 'block';
         toggleWrap.style.display  = 'none';
         confirmInput?.focus();
     });
- 
+
     cancelBtn?.addEventListener('click', () => {
         deleteWrap.style.display  = 'block';
         toggleWrap.style.display  = 'block';
@@ -358,12 +329,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirmInput) confirmInput.value = '';
         if (confirmBtn)   confirmBtn.disabled = true;
     });
- 
+
     // Only enable the delete button when user types DELETE exactly
     confirmInput?.addEventListener('input', () => {
         confirmBtn.disabled = confirmInput.value !== 'DELETE';
     });
- 
+
 });
 </script>
 @endpush

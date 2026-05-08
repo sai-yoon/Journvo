@@ -30,22 +30,16 @@ class AIService
         );
     }
 
+    // ─── Chat ─────────────────────────────────────────────────────────────────
+
     /**
      * Send a message and get a memory-aware, emotion-aware reply.
-     *
-     * @param array  $history     Full conversation history for today
-     * @param string $userMessage The latest message from the user
      */
     public function chat(array $history, string $userMessage): string
     {
-        // Extract memory context from the conversation history
-        $memoryContext  = $this->buildMemoryContext($history);
-
-        // Detect the emotion in the current message
-        $emotion        = $this->detectEmotion($userMessage);
-
-        // Build the enriched system prompt
-        $systemPrompt   = $this->systemPrompt($memoryContext, $emotion);
+        $memoryContext = $this->buildMemoryContext($history);
+        $emotion       = $this->detectEmotion($userMessage);
+        $systemPrompt  = $this->systemPrompt($memoryContext, $emotion);
 
         $messages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
@@ -58,11 +52,21 @@ class AIService
         return $reply ?? $this->fallbackReply($userMessage, $emotion);
     }
 
+    // ─── Period Summary ───────────────────────────────────────────────────────
+
     /**
-     * Compile a summary from conversation messages + NLP data.
+     * Compile a summary for a specific time period (morning/noon/evening).
      */
-    public function compileSummary(array $messages, array $nlpData): string
+    public function compilePeriodSummary(array $messages, array $nlpData, string $period): string
     {
+        $periodLabels = [
+            'morning' => 'morning (5 AM – 12 PM)',
+            'noon'    => 'afternoon (12 PM – 5 PM)',
+            'evening' => 'evening (5 PM – midnight)',
+        ];
+
+        $periodLabel = $periodLabels[$period] ?? $period;
+
         $conversation = collect($messages)
             ->map(fn($m) => ucfirst($m['sender_type']) . ': ' . $m['content'])
             ->join("\n");
@@ -71,8 +75,8 @@ class AIService
         $keywords = implode(', ', $nlpData['keywords'] ?? []);
 
         $prompt = <<<PROMPT
-You are a thoughtful journal assistant. Write a concise 2–3 sentence daily journal summary
-in third person, based on this conversation.
+You are a thoughtful journal assistant. Write a concise 2–3 sentence summary
+for this {$periodLabel} journal conversation, written in third person.
 
 Detected mood: {$mood}
 Key themes: {$keywords}
@@ -91,49 +95,69 @@ PROMPT;
 
         if ($reply) return $reply;
 
-        // NLP-only fallback if ALL models fail
         $moodPhrases = [
-            'positive' => 'had an uplifting and positive day',
-            'negative' => 'faced some challenges and difficult emotions today',
-            'neutral'  => 'had a reflective and mixed day',
+            'positive' => "had a positive {$period}",
+            'negative' => "had a challenging {$period}",
+            'neutral'  => "had a reflective {$period}",
         ];
 
-        $summary = 'Today, the user ' . ($moodPhrases[$mood] ?? 'had a notable day') . '.';
+        $summary = 'The user ' . ($moodPhrases[$mood] ?? "had a notable {$period}") . '.';
         if (!empty($nlpData['keywords'])) {
-            $summary .= ' Themes that came up: ' . implode(', ', array_slice($nlpData['keywords'], 0, 5)) . '.';
+            $summary .= ' Themes: ' . implode(', ', array_slice($nlpData['keywords'], 0, 4)) . '.';
         }
 
         return $summary;
     }
 
-    // ─── Memory Context Builder ───────────────────────────────────────────────
-
     /**
-     * Scan conversation history and extract meaningful context the AI
-     * should "remember" — topics, emotions, and things the user mentioned.
-     *
-     * This turns raw history into a short briefing paragraph injected
-     * into the system prompt so every reply feels aware of what was said.
+     * Compile the overall daily summary from all period summaries.
      */
+    public function compileOverallSummary(string $combinedSummaries, string $mood): string
+    {
+        $prompt = <<<PROMPT
+You are a thoughtful journal assistant. Based on these period summaries from someone's day,
+write a single warm and cohesive 3–4 sentence overall daily summary in third person.
+Capture the arc of the day — how it started, evolved, and ended.
+
+{$combinedSummaries}
+
+Overall mood: {$mood}
+
+Write only the summary paragraph. No title, no preamble.
+PROMPT;
+
+        $reply = $this->callWithFallback(
+            [['role' => 'user', 'content' => $prompt]],
+            250,
+            0.65
+        );
+
+        return $reply ?? "Today was a {$mood} day with various moments worth reflecting on.";
+    }
+
+    // ─── Legacy compileSummary (kept for backward compatibility) ──────────────
+
+    public function compileSummary(array $messages, array $nlpData): string
+    {
+        $period = 'overall';
+        return $this->compilePeriodSummary($messages, $nlpData, $period);
+    }
+
+    // ─── Memory Context ───────────────────────────────────────────────────────
+
     private function buildMemoryContext(array $history): string
     {
-        if (empty($history)) {
-            return '';
-        }
+        if (empty($history)) return '';
 
-        // Only look at user messages
         $userMessages = collect($history)
             ->filter(fn($m) => ($m['role'] ?? '') === 'user')
             ->pluck('content')
             ->toArray();
 
-        if (empty($userMessages)) {
-            return '';
-        }
+        if (empty($userMessages)) return '';
 
         $memories = [];
 
-        // ── 1. Topics & keywords mentioned ───────────────────────────────────
         $topicPatterns = [
             'work'      => ['work', 'job', 'office', 'boss', 'meeting', 'deadline', 'colleague', 'project', 'client'],
             'school'    => ['school', 'class', 'exam', 'study', 'professor', 'assignment', 'grade', 'university', 'college'],
@@ -144,8 +168,8 @@ PROMPT;
             'happiness' => ['happy', 'excited', 'great', 'wonderful', 'amazing', 'fantastic', 'proud', 'accomplished'],
         ];
 
+        $allText         = strtolower(implode(' ', $userMessages));
         $mentionedTopics = [];
-        $allText = strtolower(implode(' ', $userMessages));
 
         foreach ($topicPatterns as $topic => $words) {
             foreach ($words as $word) {
@@ -160,8 +184,7 @@ PROMPT;
             $memories[] = 'Topics mentioned so far: ' . implode(', ', array_unique($mentionedTopics)) . '.';
         }
 
-        // ── 2. Specific things the user said they did ─────────────────────────
-        $actionVerbs = ['went', 'had', 'did', 'made', 'started', 'finished', 'tried', 'worked', 'studied', 'met', 'talked', 'felt', 'got', 'saw', 'watched'];
+        $actionVerbs  = ['went', 'had', 'did', 'made', 'started', 'finished', 'tried', 'worked', 'studied', 'met', 'talked', 'felt', 'got', 'saw', 'watched'];
         $sharedEvents = [];
 
         foreach ($userMessages as $msg) {
@@ -179,7 +202,6 @@ PROMPT;
             }
         }
 
-        // Keep only the 3 most recent events to avoid bloating the prompt
         $sharedEvents = array_unique($sharedEvents);
         $sharedEvents = array_slice($sharedEvents, -3);
 
@@ -187,7 +209,6 @@ PROMPT;
             $memories[] = 'Things the user mentioned: "' . implode('" · "', $sharedEvents) . '".';
         }
 
-        // ── 3. Emotional arc — how the conversation has felt overall ──────────
         $emotionCounts = ['positive' => 0, 'negative' => 0];
         foreach ($userMessages as $msg) {
             $e = $this->detectEmotion($msg);
@@ -201,9 +222,7 @@ PROMPT;
             $memories[] = 'The user has expressed some difficult feelings during this conversation.';
         }
 
-        if (empty($memories)) {
-            return '';
-        }
+        if (empty($memories)) return '';
 
         return "CONVERSATION MEMORY (use this to give contextual, personal responses):\n"
             . implode("\n", $memories);
@@ -211,10 +230,6 @@ PROMPT;
 
     // ─── Emotion Detection ────────────────────────────────────────────────────
 
-    /**
-     * Detect the dominant emotion in a piece of text.
-     * Returns: 'positive' | 'negative' | 'neutral'
-     */
     private function detectEmotion(string $text): string
     {
         $text = strtolower($text);
@@ -252,41 +267,35 @@ PROMPT;
 
     // ─── System Prompt ────────────────────────────────────────────────────────
 
-    /**
-     * Build the system prompt, enriched with memory context and
-     * emotion-specific guidance so replies feel personal and aware.
-     */
     private function systemPrompt(string $memoryContext = '', string $currentEmotion = 'neutral'): string
     {
         $today = now()->format('l, F j, Y');
 
-        // Emotion-specific instruction injected into the prompt
         $emotionGuidance = match($currentEmotion) {
             'positive' => <<<GUIDANCE
             The user's latest message has a POSITIVE tone.
             - Celebrate with them warmly but briefly
             - Ask what specifically made it good or special
-            - Example follow-ups: "That's great to hear! What made it so special?", "It sounds like things went well — what was the highlight?", "That must feel really good. What do you think made the difference?"
+            - Example follow-ups: "That's great to hear! What made it so special?", "It sounds like things went well — what was the highlight?"
             GUIDANCE,
 
             'negative' => <<<GUIDANCE
             The user's latest message has a NEGATIVE or difficult tone.
             - Acknowledge their feelings with empathy first, before asking anything
             - Be gentle — do not minimize or rush to fix
-            - Example follow-ups: "That sounds really tough. What's been weighing on you most?", "I'm sorry to hear that. Do you want to talk about what happened?", "That sounds exhausting. How are you holding up?"
+            - Example follow-ups: "That sounds really tough. What's been weighing on you most?", "I'm sorry to hear that. Do you want to talk about what happened?"
             GUIDANCE,
 
             default => <<<GUIDANCE
             The user's latest message has a NEUTRAL tone.
             - Be curious and gently encouraging
             - Ask open-ended questions to draw out more reflection
-            - Example follow-ups: "How did that make you feel?", "What stood out most about that?", "Was that what you expected?"
+            - Example follow-ups: "How did that make you feel?", "What stood out most about that?"
             GUIDANCE,
         };
 
-        // Memory section — only included if there's something to remember
         $memorySection = !empty($memoryContext)
-            ? "\n\n{$memoryContext}\n\nUse the memory above to make your responses feel personal and continuous. Reference what they mentioned naturally — like a friend who was listening, not like a bot reading a list."
+            ? "\n\n{$memoryContext}\n\nUse the memory above to make your responses feel personal and continuous."
             : '';
 
         return <<<PROMPT
@@ -298,8 +307,6 @@ Your role:
 - Be supportive, curious, and non-judgmental
 - Keep responses concise (2–4 sentences max)
 - Never give unsolicited advice or suggestions
-- Feel like a trusted friend who genuinely remembers what was said
-- Reference earlier parts of the conversation naturally when relevant
 - NEVER start a response with "Tell me more." — always be specific
 
 EMOTION GUIDANCE FOR THIS RESPONSE:
@@ -307,16 +314,12 @@ EMOTION GUIDANCE FOR THIS RESPONSE:
 PROMPT;
     }
 
-    // ─── Fallback Reply (when API fails) ─────────────────────────────────────
+    // ─── Fallback Reply ───────────────────────────────────────────────────────
 
-    /**
-     * Emotion-aware fallback replies used only when the API is unavailable.
-     */
     private function fallbackReply(string $userMessage, string $emotion = 'neutral'): string
     {
         $text = strtolower($userMessage);
 
-        // Specific keyword overrides first
         if (str_contains($text, 'deadline') || str_contains($text, 'work'))
             return $emotion === 'negative'
                 ? "Work pressure sounds really draining. Was today's deadline stress similar to what you've felt before?"
@@ -330,7 +333,6 @@ PROMPT;
         if (str_contains($text, 'friend') || str_contains($text, 'family'))
             return "Time with people we care about always leaves an impression. How did it go?";
 
-        // Emotion-based general fallbacks
         return match($emotion) {
             'positive' => collect([
                 "That's really good to hear! What made today feel that way?",
@@ -355,9 +357,6 @@ PROMPT;
 
     // ─── API Caller ───────────────────────────────────────────────────────────
 
-    /**
-     * Try each model in the fallback list until one succeeds.
-     */
     private function callWithFallback(array $messages, int $maxTokens, float $temperature): ?string
     {
         foreach ($this->modelFallbacks as $model) {

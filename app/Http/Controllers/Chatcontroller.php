@@ -18,16 +18,17 @@ class ChatController extends Controller
     ) {}
 
     /**
-     * Show chat page — loads or creates today's conversation.
+     * Show chat page — loads or creates today's conversation for current period.
      */
     public function index()
     {
-        /** @var \App\Models\User $user */
         $user         = auth()->user();
         $conversation = $user->todaysConversation();
         $messages     = $conversation->messages;
+        $period       = Conversation::resolvePeriod();
+        $periodMeta   = Conversation::periodLabel($period);
 
-        return view('chat.index', compact('conversation', 'messages'));
+        return view('chat.index', compact('conversation', 'messages', 'period', 'periodMeta'));
     }
 
     /**
@@ -37,32 +38,29 @@ class ChatController extends Controller
     {
         $request->validate(['message' => 'required|string|max:1000']);
 
-        /** @var \App\Models\User $user */
         $user         = auth()->user();
         $conversation = $user->todaysConversation();
         $userText     = trim($request->input('message'));
 
-        // 1. Save user message
+        // Save user message
         $conversation->messages()->create([
             'sender_type' => 'user',
             'content'     => $userText,
         ]);
 
-        // 2. Build AI history (maps sender_type → role for OpenRouter)
+        // Build AI history
         $history = $conversation->toAIHistory(30);
-        // Remove the message we just added — it will be appended by AIService
         array_pop($history);
 
-        // 3. Get AI reply
+        // Get AI reply
         $reply = $this->ai->chat($history, $userText);
 
-        // 4. Save AI reply
+        // Save AI reply
         $conversation->messages()->create([
             'sender_type' => 'ai',
             'content'     => $reply,
         ]);
 
-        // 5. Quick sentiment for real-time mood dot
         $sentiment = $this->nlp->quickSentiment($userText);
 
         return response()->json([

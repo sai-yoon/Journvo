@@ -37,6 +37,11 @@
             </a>
         </li>
         <li>
+            <a href="{{ route('stats') }}" class="{{ request()->routeIs('stats*') ? 'active' : '' }}">
+                <span class="nav-icon">📊</span> Stats
+            </a>
+        </li>
+        <li>
             <a href="{{ route('settings') }}" class="{{ request()->routeIs('settings*') ? 'active' : '' }}">
                 <span class="nav-icon">⚙</span> Settings
             </a>

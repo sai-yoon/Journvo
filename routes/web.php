@@ -5,9 +5,9 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\StatsController;
 use Illuminate\Support\Facades\Route;
 
-// ─── Guest only ───────────────────────────────────────────────────────────────
 Route::middleware('guest')->group(function () {
     Route::get('/login',    [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login',   [AuthController::class, 'login']);
@@ -15,10 +15,8 @@ Route::middleware('guest')->group(function () {
     Route::post('/register',[AuthController::class, 'register']);
 });
 
-// ─── Logout ───────────────────────────────────────────────────────────────────
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
-// ─── Authenticated ────────────────────────────────────────────────────────────
 Route::middleware('auth')->group(function () {
 
     // Chat
@@ -30,6 +28,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/journal/{date}',   [JournalController::class, 'show'])->name('journal.show')
         ->where('date', '\d{4}-\d{2}-\d{2}');
     Route::post('/journal/compile', [JournalController::class, 'compile'])->name('journal.compile');
+
+    // Stats
+    Route::get('/stats', [StatsController::class, 'index'])->name('stats');
 
     // Settings
     Route::get('/settings',            [SettingsController::class, 'index'])->name('settings');

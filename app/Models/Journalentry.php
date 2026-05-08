@@ -11,6 +11,7 @@ class JournalEntry extends Model
     protected $fillable = [
         'user_id',
         'entry_date',
+        'time_of_day',   // 'overall' | 'morning' | 'noon' | 'evening'
         'summary',
         'mood',
         'keywords',
@@ -26,8 +27,6 @@ class JournalEntry extends Model
         return $this->belongsTo(User::class);
     }
 
-    // ─── Computed helpers (not stored — derived at runtime) ───────────────
-
     public function getMoodEmojiAttribute(): string
     {
         return match($this->mood) {
@@ -37,12 +36,8 @@ class JournalEntry extends Model
         };
     }
 
-    public function getMoodColorAttribute(): string
+    public function getPeriodMetaAttribute(): array
     {
-        return match($this->mood) {
-            'positive' => '#7A9E7E',
-            'negative' => '#C47B7B',
-            default    => '#8899AA',
-        };
+        return Conversation::periodLabel($this->time_of_day ?? 'overall');
     }
 }
